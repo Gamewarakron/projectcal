@@ -3,7 +3,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const HealthDietApp());
+  final prefs = await SharedPreferences.getInstance();
+  final bool isLoggedIn = prefs.getBool('is_logged_in') ?? false;
+  final bool isDarkMode = prefs.getBool('is_dark_mode') ?? false;
+
+  runApp(HealthDietApp(isLoggedIn: isLoggedIn, isDarkMode: isDarkMode));
 }
 
 // ==================== Data Models ====================
@@ -33,7 +37,7 @@ class MealItem {
   final String title;
   final int calories;
   final double protein;
-  final String category; // 'คลีน', 'โปรตีนสูง', 'ลดน้ำหนัก'
+  final String category;
 
   MealItem({
     required this.id,
@@ -107,30 +111,29 @@ class AppColors {
   static const Color textDarkSecondary = Color(0xFFAAAAAA);
   static const Color mintCardBg = Color(0xFFE3F2ED);
   static const Color orangeCardBg = Color(0xFFFDF1EB);
-  static const Color cardDarkBg = Color(0xFF1E1E1E);
 }
 
 class HealthDietApp extends StatefulWidget {
-  const HealthDietApp({super.key});
+  final bool isLoggedIn;
+  final bool isDarkMode;
+
+  const HealthDietApp({
+    super.key,
+    required this.isLoggedIn,
+    required this.isDarkMode,
+  });
 
   @override
   State<HealthDietApp> createState() => _HealthDietAppState();
 }
 
 class _HealthDietAppState extends State<HealthDietApp> {
-  bool _isDarkMode = false;
+  late bool _isDarkMode;
 
   @override
   void initState() {
     super.initState();
-    _loadThemeSetting();
-  }
-
-  Future<void> _loadThemeSetting() async {
-    final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      _isDarkMode = prefs.getBool('is_dark_mode') ?? false;
-    });
+    _isDarkMode = widget.isDarkMode;
   }
 
   Future<void> _toggleTheme(bool isDark) async {
@@ -172,9 +175,432 @@ class _HealthDietAppState extends State<HealthDietApp> {
         scaffoldBackgroundColor: AppColors.darkBackground,
         fontFamily: 'Roboto',
       ),
-      home: GoalCalculatorScreen(
-        isDarkMode: _isDarkMode,
-        onThemeChanged: _toggleTheme,
+      home: widget.isLoggedIn
+          ? GoalCalculatorScreen(isDarkMode: _isDarkMode, onThemeChanged: _toggleTheme)
+          : LoginScreen(isDarkMode: _isDarkMode, onThemeChanged: _toggleTheme),
+    );
+  }
+}
+
+// ==================== Screen 0: Login Screen ====================
+class LoginScreen extends StatefulWidget {
+  final bool isDarkMode;
+  final ValueChanged<bool> onThemeChanged;
+
+  const LoginScreen({
+    super.key,
+    required this.isDarkMode,
+    required this.onThemeChanged,
+  });
+
+  @override
+  State<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends State<LoginScreen> {
+  final TextEditingController _emailController = TextEditingController(text: 'user@health.com');
+  final TextEditingController _passwordController = TextEditingController(text: '123456');
+  bool _obscurePassword = true;
+  bool _isLoading = false;
+  String _errorMessage = '';
+
+  Future<void> _handleLogin() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = '';
+    });
+
+    await Future.delayed(const Duration(seconds: 1));
+
+    if (_emailController.text.isNotEmpty && _passwordController.text.length >= 6) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('is_logged_in', true);
+      await prefs.setString('user_email', _emailController.text);
+
+      if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => GoalCalculatorScreen(
+            isDarkMode: widget.isDarkMode,
+            onThemeChanged: widget.onThemeChanged,
+          ),
+        ),
+      );
+    } else {
+      setState(() {
+        _isLoading = false;
+        _errorMessage = 'กรุณากรอกอีเมลและรหัสผ่านอย่างน้อย 6 ตัวอักษร';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = widget.isDarkMode;
+
+    return Scaffold(
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(
+                  child: Container(
+                    width: 80,
+                    height: 80,
+                    decoration: BoxDecoration(
+                      color: AppColors.mossGreenPrimary,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Center(
+                      child: Text('🥗', style: TextStyle(fontSize: 40)),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  'Health & Diet App',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 26,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white : AppColors.mossGreenPrimary,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'เริ่มต้นดูแลสุขภาพและโภชนาการของคุณวันนี้',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: isDark ? AppColors.textDarkSecondary : AppColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 36),
+                Card(
+                  elevation: 2,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                  color: isDark ? AppColors.surfaceDark : AppColors.surfaceWhite,
+                  child: Padding(
+                    padding: const EdgeInsets.all(20.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'เข้าสู่ระบบ (Login)',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.pastelOrange,
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        TextField(
+                          controller: _emailController,
+                          keyboardType: TextInputType.emailAddress,
+                          style: TextStyle(color: isDark ? Colors.white : Colors.black),
+                          decoration: InputDecoration(
+                            labelText: 'อีเมล (Email)',
+                            prefixIcon: const Icon(Icons.email_outlined),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        TextField(
+                          controller: _passwordController,
+                          obscureText: _obscurePassword,
+                          style: TextStyle(color: isDark ? Colors.white : Colors.black),
+                          decoration: InputDecoration(
+                            labelText: 'รหัสผ่าน (Password)',
+                            prefixIcon: const Icon(Icons.lock_outline),
+                            suffixIcon: IconButton(
+                              icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
+                              onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                            ),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                        ),
+                        if (_errorMessage.isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          Text(_errorMessage, style: const TextStyle(color: Colors.red, fontSize: 13)),
+                        ],
+                        const SizedBox(height: 24),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 52,
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.mossGreenPrimary,
+                              foregroundColor: AppColors.surfaceWhite,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
+                            ),
+                            onPressed: _isLoading ? null : _handleLogin,
+                            child: _isLoading
+                                ? const CircularProgressIndicator(color: Colors.white)
+                                : const Text('เข้าสู่ระบบ', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text('ยังไม่มีบัญชีใช่ไหม? ', style: TextStyle(color: isDark ? AppColors.textDarkSecondary : AppColors.textSecondary)),
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => RegisterScreen(
+                              isDarkMode: widget.isDarkMode,
+                              onThemeChanged: widget.onThemeChanged,
+                            ),
+                          ),
+                        );
+                      },
+                      child: const Text(
+                        'สมัครสมาชิก',
+                        style: TextStyle(color: AppColors.pastelOrange, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ==================== Screen 0.5: Register Screen ====================
+class RegisterScreen extends StatefulWidget {
+  final bool isDarkMode;
+  final ValueChanged<bool> onThemeChanged;
+
+  const RegisterScreen({
+    super.key,
+    required this.isDarkMode,
+    required this.onThemeChanged,
+  });
+
+  @override
+  State<RegisterScreen> createState() => _RegisterScreenState();
+}
+
+class _RegisterScreenState extends State<RegisterScreen> {
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _confirmPasswordController = TextEditingController();
+  bool _obscurePassword = true;
+  bool _isLoading = false;
+  String _errorMessage = '';
+
+  Future<void> _handleRegister() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = '';
+    });
+
+    await Future.delayed(const Duration(seconds: 1));
+
+    if (_nameController.text.isEmpty || _emailController.text.isEmpty) {
+      setState(() {
+        _isLoading = false;
+        _errorMessage = 'กรุณากรอกข้อมูลให้ครบถ้วน';
+      });
+      return;
+    }
+
+    if (_passwordController.text.length < 6) {
+      setState(() {
+        _isLoading = false;
+        _errorMessage = 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร';
+      });
+      return;
+    }
+
+    if (_passwordController.text != _confirmPasswordController.text) {
+      setState(() {
+        _isLoading = false;
+        _errorMessage = 'รหัสผ่านและการยืนยันรหัสผ่านไม่ตรงกัน';
+      });
+      return;
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('is_logged_in', true);
+    await prefs.setString('user_name', _nameController.text);
+    await prefs.setString('user_email', _emailController.text);
+
+    if (!mounted) return;
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(
+        builder: (context) => GoalCalculatorScreen(
+          isDarkMode: widget.isDarkMode,
+          onThemeChanged: widget.onThemeChanged,
+        ),
+      ),
+      (route) => false,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = widget.isDarkMode;
+
+    return Scaffold(
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back, color: isDark ? Colors.white : AppColors.textPrimary),
+          onPressed: () => Navigator.pop(context),
+        ),
+      ),
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'สร้างบัญชีใหม่ ✨',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 26,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white : AppColors.mossGreenPrimary,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'เริ่มต้นเส้นทางสุขภาพที่ดีของคุณกับเรา',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: isDark ? AppColors.textDarkSecondary : AppColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 28),
+                Card(
+                  elevation: 2,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                  color: isDark ? AppColors.surfaceDark : AppColors.surfaceWhite,
+                  child: Padding(
+                    padding: const EdgeInsets.all(20.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'สมัครสมาชิก (Sign Up)',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.pastelOrange,
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        TextField(
+                          controller: _nameController,
+                          style: TextStyle(color: isDark ? Colors.white : Colors.black),
+                          decoration: InputDecoration(
+                            labelText: 'ชื่อ-นามสกุล (Full Name)',
+                            prefixIcon: const Icon(Icons.person_outline),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        TextField(
+                          controller: _emailController,
+                          keyboardType: TextInputType.emailAddress,
+                          style: TextStyle(color: isDark ? Colors.white : Colors.black),
+                          decoration: InputDecoration(
+                            labelText: 'อีเมล (Email)',
+                            prefixIcon: const Icon(Icons.email_outlined),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        TextField(
+                          controller: _passwordController,
+                          obscureText: _obscurePassword,
+                          style: TextStyle(color: isDark ? Colors.white : Colors.black),
+                          decoration: InputDecoration(
+                            labelText: 'รหัสผ่าน (Password)',
+                            prefixIcon: const Icon(Icons.lock_outline),
+                            suffixIcon: IconButton(
+                              icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
+                              onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                            ),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        TextField(
+                          controller: _confirmPasswordController,
+                          obscureText: _obscurePassword,
+                          style: TextStyle(color: isDark ? Colors.white : Colors.black),
+                          decoration: InputDecoration(
+                            labelText: 'ยืนยันรหัสผ่าน (Confirm Password)',
+                            prefixIcon: const Icon(Icons.lock_reset),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                        ),
+                        if (_errorMessage.isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          Text(_errorMessage, style: const TextStyle(color: Colors.red, fontSize: 13)),
+                        ],
+                        const SizedBox(height: 24),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 52,
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.mossGreenPrimary,
+                              foregroundColor: AppColors.surfaceWhite,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
+                            ),
+                            onPressed: _isLoading ? null : _handleRegister,
+                            child: _isLoading
+                                ? const CircularProgressIndicator(color: Colors.white)
+                                : const Text('สมัครสมาชิก', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text('มีบัญชีอยู่แล้วใช่ไหม? ', style: TextStyle(color: isDark ? AppColors.textDarkSecondary : AppColors.textSecondary)),
+                    GestureDetector(
+                      onTap: () => Navigator.pop(context),
+                      child: const Text(
+                        'เข้าสู่ระบบ',
+                        style: TextStyle(color: AppColors.pastelOrange, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -232,7 +658,6 @@ class _GoalCalculatorScreenState extends State<GoalCalculatorScreen> {
         ? (tdee - 400).toInt()
         : (tdee + 400).toInt();
 
-    // Save to SharedPreferences
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('gender', _gender == Gender.male ? 'male' : 'female');
     await prefs.setInt('age', age);
@@ -273,7 +698,6 @@ class _GoalCalculatorScreenState extends State<GoalCalculatorScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header with Theme Toggle
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -320,8 +744,6 @@ class _GoalCalculatorScreenState extends State<GoalCalculatorScreen> {
                 ],
               ),
               const SizedBox(height: 24),
-
-              // Form Input Card
               Card(
                 elevation: 2,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -368,8 +790,6 @@ class _GoalCalculatorScreenState extends State<GoalCalculatorScreen> {
                 ),
               ),
               const SizedBox(height: 20),
-
-              // Goal Selection Cards
               Text(
                 'เป้าหมายของคุณ',
                 style: TextStyle(
@@ -399,8 +819,6 @@ class _GoalCalculatorScreenState extends State<GoalCalculatorScreen> {
                 onTap: () => setState(() => _selectedGoal = GoalType.weightGain),
               ),
               const SizedBox(height: 28),
-
-              // Bottom Action Button
               SizedBox(
                 width: double.infinity,
                 height: 56,
@@ -667,13 +1085,27 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> {
         userProfile: widget.userProfile,
         isDarkMode: widget.isDarkMode,
         onThemeChanged: widget.onThemeChanged,
+        onLogout: () async {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setBool('is_logged_in', false);
+          if (!mounted) return;
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(
+              builder: (context) => LoginScreen(
+                isDarkMode: widget.isDarkMode,
+                onThemeChanged: widget.onThemeChanged,
+              ),
+            ),
+            (route) => false,
+          );
+        },
         onResetData: () async {
           setState(() {
             _consumedCalories = 0;
             _waterGlasses = 0;
           });
           _saveDailyProgress();
-          Navigator.pop(context);
         },
       ),
     ];
@@ -725,7 +1157,6 @@ class DailyMealPlannerTab extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -765,8 +1196,6 @@ class DailyMealPlannerTab extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 16),
-
-            // Calorie Summary Card
             Card(
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
               color: AppColors.mossGreenPrimary,
@@ -821,8 +1250,6 @@ class DailyMealPlannerTab extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 20),
-
-            // Water Tracker Card
             Card(
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               color: isDark ? AppColors.surfaceDark : AppColors.surfaceWhite,
@@ -861,21 +1288,17 @@ class DailyMealPlannerTab extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 20),
-
-            // Meal List Section
             _mealSectionHeader('มื้อเช้า (Breakfast)', '350 kcal', () {}),
             const SizedBox(height: 8),
             _mealCard('โจ๊กหมูสับใส่ไข่ลวก', 350, 18, isDark, () {
               onSelectRecipe(_sampleRecipe('โจ๊กหมูสับใส่ไข่ลวก', 350));
             }),
-
             const SizedBox(height: 16),
             _mealSectionHeader('มื้อกลางวัน (Lunch)', '520 kcal', () {}),
             const SizedBox(height: 8),
             _mealCard('ข้าวกะเพราอกไก่ไข่ดาวไร้น้ำมัน', 520, 35, isDark, () {
               onSelectRecipe(_sampleRecipe('ข้าวกะเพราอกไก่ไข่ดาวไร้น้ำมัน', 520));
             }),
-
             const SizedBox(height: 16),
             _mealSectionHeader('มื้อเย็น (Dinner)', '400 kcal', () {}),
             const SizedBox(height: 8),
@@ -1222,6 +1645,7 @@ class ProfileSettingsTab extends StatelessWidget {
   final UserProfile userProfile;
   final bool isDarkMode;
   final ValueChanged<bool> onThemeChanged;
+  final VoidCallback onLogout;
   final VoidCallback onResetData;
 
   const ProfileSettingsTab({
@@ -1229,6 +1653,7 @@ class ProfileSettingsTab extends StatelessWidget {
     required this.userProfile,
     required this.isDarkMode,
     required this.onThemeChanged,
+    required this.onLogout,
     required this.onResetData,
   });
 
@@ -1275,16 +1700,27 @@ class ProfileSettingsTab extends StatelessWidget {
             const SizedBox(height: 20),
             SizedBox(
               width: double.infinity,
-              child: OutlinedButton.styleFrom(foregroundColor: Colors.red).wrap(
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.red.shade50,
-                    foregroundColor: Colors.red,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  ),
-                  onPressed: onResetData,
-                  child: const Text('รีเซ็ตข้อมูลประจำวัน (Reset Data)', style: TextStyle(fontWeight: FontWeight.bold)),
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red.shade50,
+                  foregroundColor: Colors.red,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                 ),
+                onPressed: onResetData,
+                child: const Text('รีเซ็ตข้อมูลประจำวัน (Reset Data)', style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.mossGreenPrimary,
+                  foregroundColor: AppColors.surfaceWhite,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                ),
+                onPressed: onLogout,
+                child: const Text('ออกจากระบบ (Logout)', style: TextStyle(fontWeight: FontWeight.bold)),
               ),
             ),
           ],
@@ -1292,11 +1728,6 @@ class ProfileSettingsTab extends StatelessWidget {
       ),
     );
   }
-}
-
-// Extension to help wrap outlined button style easily
-extension on ButtonStyle {
-  Widget wrap(Widget child) => child;
 }
 
 // ==================== Screen 3: Recipe Detail Screen ====================
@@ -1535,7 +1966,7 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(icon, style: const TextStyle(fontSize: 13)),
-          const SizedBox(width: 6),
+          const SizedBox(width: 5),
           Text(text, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.mossGreenPrimary)),
         ],
       ),
